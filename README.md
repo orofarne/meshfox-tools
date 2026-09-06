@@ -196,3 +196,28 @@ OK
 ```
 <!-- /meshfox:output -->
 
+## Second brain: CLAUDE.md template
+<!-- meshfox:node id="second-brain-template" -->
+
+`templates/CLAUDE.md` is a ready-to-copy Claude Code project template for
+using a meshfox canvas (`MEMORY.canvas.md`) as a persistent second brain —
+memory that survives across sessions instead of living only in a chat
+transcript. It covers the same four memory types (`user`/`feedback`/
+`project`/`reference`) as meshfox's own
+[second-brain example](https://github.com/orofarne/meshfox/blob/main/examples/second-brain.canvas.md),
+a constraint fence that enforces a `**Why:**` line on every
+`feedback`/`project` entry, and the `auto-timestamps` option so `meshfox
+node find --since` actually has something to filter on.
+
+Copy it into a project as that project's own `CLAUDE.md` (merge by hand if
+one already exists), then follow its own "First-time setup" section to
+bootstrap `MEMORY.canvas.md`. Every command it documents — bootstrap,
+`node add`/`node body`/`node find`, `validate`/`check` — was run for real
+against the actual `meshfox` binary while writing it, not just written by
+hand.
+
+#### Template
+<!-- meshfox:node id="second-brain-template-file" type="file" -->
+
+[templates/CLAUDE.md](./templates/CLAUDE.md)
+
