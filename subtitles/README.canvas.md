@@ -1,5 +1,6 @@
 <!-- meshfox:canvas -->
 # Video subtitles: transcribe, translate, burn in
+<!-- meshfox:node id="root" -->
 
 <!-- meshfox:comment -->
 > This is a [meshfox](https://meshfox.orofarne.net/) document — open it
@@ -9,43 +10,21 @@
 
 Takes a video, transcribes the speech locally (Whisper on Apple Silicon),
 optionally translates the subtitles with your coding agent, lets you fix them
-by hand, and burns the result into a new video. This canvas plus
-one helper file, `subs_lib.py`, is the whole tool: environment, tests and every
-pipeline step live in the nodes below.
+by hand, and burns the result into a new video. This canvas is the whole
+tool: the environment, the code, its tests and every pipeline step live in the
+nodes below, and the steps share code through `extends=`.
 
-<!-- meshfox:var name="VIDEO" type="file" ext="mp4,mkv,mov,webm,m4v" prompt="Video to subtitle" -->
-<!-- meshfox:var name="OUTPUT" type="file" mode="save" ext="mp4" prompt="Where to write the video with burned-in subtitles (.mp4)" -->
-<!-- meshfox:var name="SRC_LANG" type="select" choices="auto,en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="auto" prompt="Language spoken in the video (auto = detect)" -->
-<!-- meshfox:var name="DST_LANG" type="select" choices="en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="en" prompt="Subtitle language (translated only if it differs from the spoken one)" -->
-<!-- meshfox:var name="WHISPER_MODEL" type="select" choices="mlx-community/whisper-large-v3-turbo,mlx-community/whisper-small-mlx,mlx-community/whisper-tiny" default="mlx-community/whisper-large-v3-turbo" prompt="Whisper model (bigger = slower, more accurate)" -->
-<!-- meshfox:var name="SUB_FONT" default="Helvetica" prompt="Subtitle font" -->
-<!-- meshfox:var name="SUB_SIZE" default="5.5" prompt="Subtitle size, % of the video height (4-7 is typical)" -->
-<!-- meshfox:var name="SUB_POS" type="select" choices="bottom,middle,top" default="bottom" prompt="Where the subtitles sit" -->
-<!-- meshfox:var name="SUB_MARGIN" default="5" prompt="Distance from the top/bottom edge, % of the video height (ignored for middle)" -->
-<!-- meshfox:var name="SUB_COLOR" default="#FFFFFF" prompt="Text colour, #RRGGBB (the outline is always black)" -->
-<!-- meshfox:var name="EDIT" type="bool" default="false" prompt="Pause to edit the subtitles by hand before burning them in?" -->
-<!-- meshfox:var name="EDITOR_CMD" default="nvim" prompt="Editor for the .srt (a terminal editor, e.g. nvim, hx, nano)" -->
-<!-- meshfox:var name="PREVIEW" type="bool" default="false" prompt="Open the video in mpv next to the editor (press r there to reload the subtitles)?" -->
-<!-- meshfox:var name="WORK_DIR" type="dir" default="@tmp/work" prompt="Where to keep intermediate files (transcript, cues, editable .srt, .ass); default: this canvas's temporary directory" -->
-<!-- meshfox:var name="PYTHON" from="env/setup" -->
-<!-- meshfox:var name="WORDS" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="CUES" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="TRANSLATED" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="SRT" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="SRT_EDITED" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="ASS" type="file" mode="save" from="paths/paths" -->
-<!-- meshfox:var name="NEEDS_TRANSLATION" type="bool" from="plan/plan" -->
-<!-- meshfox:var name="SRC_USED" from="plan/plan" -->
-
-## Convert
-<!-- meshfox:node id="main" color="4" -->
-
-The entry point: run it, answer the prompts (video, output file, languages,
-whether to pause for editing), get the video.
-
-```bash name="main" default env="OUTPUT" deps="render/render" output="markdown"
-echo "**done**: [$OUTPUT]($OUTPUT)"
+```button name="main" default deps="render/render"
+▶ Convert the video
 ```
+
+The pipeline is the row of nodes below, left to right: **Transcribe → Segment →
+Translate → Export → Edit → Render**; the arrows are the `deps=` and
+`inputs=`/`outputs=` edges. Dashed arrows are conditional: **Translate** is in
+the chain only when `NEEDS_TRANSLATION` is true (spoken language ≠ `DST_LANG`,
+decided by **Plan** *after* transcription, so `SRC_LANG=auto` works), **Edit**
+only when `EDIT` is true. The button asks for the video, the output file, the
+languages and whether to pause for editing, then runs the whole chain.
 
 `OUTPUT` is the only file written where you asked for it. Everything else
 goes to `WORK_DIR` (default: this canvas's temporary directory, `@tmp/work`):
@@ -78,58 +57,35 @@ the generated subtitles change afterwards (a new `DST_LANG`, a re-transcription)
 the previous edits are kept as `*.edited.srt.bak` and **Edit** starts again from
 the new subtitles.
 
-## Pipeline at a glance
-<!-- meshfox:node id="overview" -->
+<!-- meshfox:var name="VIDEO" type="file" ext="mp4,mkv,mov,webm,m4v" prompt="Video to subtitle" -->
+<!-- meshfox:var name="OUTPUT" type="file" mode="save" ext="mp4" prompt="Where to write the video with burned-in subtitles (.mp4)" -->
+<!-- meshfox:var name="SRC_LANG" type="select" choices="auto,en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="auto" prompt="Language spoken in the video (auto = detect)" -->
+<!-- meshfox:var name="DST_LANG" type="select" choices="en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="en" prompt="Subtitle language (translated only if it differs from the spoken one)" -->
+<!-- meshfox:var name="WHISPER_MODEL" type="select" choices="mlx-community/whisper-large-v3-turbo,mlx-community/whisper-small-mlx,mlx-community/whisper-tiny" default="mlx-community/whisper-large-v3-turbo" prompt="Whisper model (bigger = slower, more accurate)" -->
+<!-- meshfox:var name="SUB_FONT" default="Helvetica" prompt="Subtitle font" -->
+<!-- meshfox:var name="SUB_SIZE" default="5.5" prompt="Subtitle size, % of the video height (4-7 is typical)" -->
+<!-- meshfox:var name="SUB_POS" type="select" choices="bottom,middle,top" default="bottom" prompt="Where the subtitles sit" -->
+<!-- meshfox:var name="SUB_MARGIN" default="5" prompt="Distance from the top/bottom edge, % of the video height (ignored for middle)" -->
+<!-- meshfox:var name="SUB_COLOR" default="#FFFFFF" prompt="Text colour, #RRGGBB (the outline is always black)" -->
+<!-- meshfox:var name="EDIT" type="bool" default="false" prompt="Pause to edit the subtitles by hand before burning them in?" -->
+<!-- meshfox:var name="EDITOR_CMD" default="nvim" prompt="Editor for the .srt (a terminal editor, e.g. nvim, hx, nano)" -->
+<!-- meshfox:var name="PREVIEW" type="bool" default="false" prompt="Open the video in mpv next to the editor (press r there to reload the subtitles)?" -->
+<!-- meshfox:var name="WORK_DIR" type="dir" default="@tmp/work" prompt="Where to keep intermediate files (transcript, cues, editable .srt, .ass); default: this canvas's temporary directory" -->
+<!-- meshfox:var name="PYTHON" from="env/setup" -->
+<!-- meshfox:var name="WORDS" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="CUES" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="TRANSLATED" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="SRT" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="SRT_EDITED" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="ASS" type="file" mode="save" from="paths/paths" -->
+<!-- meshfox:var name="NEEDS_TRANSLATION" type="bool" from="plan/plan" -->
+<!-- meshfox:var name="SRC_USED" from="plan/plan" -->
 
-![Pipeline: VIDEO, transcribe, segment, optional translate and check, export, optional edit, render, OUTPUT; plan decides whether translation is needed](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDQwIDIxNCIgd2lkdGg9IjEwNDAiIGhlaWdodD0iMjE0IiBmb250LWZhbWlseT0iLWFwcGxlLXN5c3RlbSxIZWx2ZXRpY2EsQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyI+CjxkZWZzPjxtYXJrZXIgaWQ9ImEiIHZpZXdCb3g9IjAgMCAxMCAxMCIgcmVmWD0iOSIgcmVmWT0iNSIgbWFya2VyV2lkdGg9IjciIG1hcmtlckhlaWdodD0iNyIgb3JpZW50PSJhdXRvIj48cGF0aCBkPSJNMCAxIEwxMCA1IEwwIDkgeiIgZmlsbD0iIzQ3NTU2OSIvPjwvbWFya2VyPjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjEwNDAiIGhlaWdodD0iMjE0IiByeD0iMTIiIGZpbGw9IiNmOGZhZmMiLz4KPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDk3NzA2IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ij4KPHJlY3QgeD0iMzQ0IiB5PSI0MiIgd2lkdGg9IjIzNiIgaGVpZ2h0PSI3NiIgcng9IjEwIi8+CjxyZWN0IHg9IjY4NiIgeT0iNDIiIHdpZHRoPSIxMTYiIGhlaWdodD0iNzYiIHJ4PSIxMCIvPgo8L2c+CjxnIGZpbGw9IiNiNDUzMDkiIGZvbnQtc2l6ZT0iMTEuNSIgZm9udC1zdHlsZT0iaXRhbGljIj4KPHRleHQgeD0iMzUyIiB5PSIzNiI+aWYgTkVFRFNfVFJBTlNMQVRJT048L3RleHQ+Cjx0ZXh0IHg9IjY5NCIgeT0iMzYiPmlmIEVESVQ8L3RleHQ+CjwvZz4KPGcgc3Ryb2tlPSIjNjQ3NDhiIiBzdHJva2Utd2lkdGg9IjEuNSI+CjxyZWN0IHg9IjEyIiB5PSI2MCIgd2lkdGg9Ijg4IiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0iI2RiZWFmZSIgc3Ryb2tlPSIjMjU2M2ViIi8+CjxyZWN0IHg9IjkyNCIgeT0iNjAiIHdpZHRoPSI4OCIgaGVpZ2h0PSI0MCIgcng9IjgiIGZpbGw9IiNkY2ZjZTciIHN0cm9rZT0iIzE2YTM0YSIvPgo8cmVjdCB4PSIxMjYiIHk9IjYwIiB3aWR0aD0iODgiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHg9IjI0MCIgeT0iNjAiIHdpZHRoPSI4OCIgaGVpZ2h0PSI0MCIgcng9IjgiIGZpbGw9IiNmZmYiLz4KPHJlY3QgeD0iMzU0IiB5PSI2MCIgd2lkdGg9Ijg4IiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0iI2ZmZiIvPgo8cmVjdCB4PSI0NjgiIHk9IjYwIiB3aWR0aD0iODgiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHg9IjU4MiIgeT0iNjAiIHdpZHRoPSI4OCIgaGVpZ2h0PSI0MCIgcng9IjgiIGZpbGw9IiNmZmYiLz4KPHJlY3QgeD0iNjk2IiB5PSI2MCIgd2lkdGg9Ijg4IiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0iI2ZmZiIvPgo8cmVjdCB4PSI4MTAiIHk9IjYwIiB3aWR0aD0iODgiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHg9IjI0MCIgeT0iMTUwIiB3aWR0aD0iODgiIGhlaWdodD0iNDAiIHJ4PSI4IiBmaWxsPSIjZmZmIi8+CjwvZz4KPGcgZmlsbD0iIzBmMTcyYSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Cjx0ZXh0IHg9IjU2IiB5PSI4NSI+VklERU88L3RleHQ+PHRleHQgeD0iOTY4IiB5PSI4NSI+T1VUUFVUPC90ZXh0Pgo8dGV4dCB4PSIxNzAiIHk9Ijg1Ij50cmFuc2NyaWJlPC90ZXh0Pjx0ZXh0IHg9IjI4NCIgeT0iODUiPnNlZ21lbnQ8L3RleHQ+Cjx0ZXh0IHg9IjM5OCIgeT0iODUiPnRyYW5zbGF0ZTwvdGV4dD48dGV4dCB4PSI1MTIiIHk9Ijg1Ij5jaGVjazwvdGV4dD4KPHRleHQgeD0iNjI2IiB5PSI4NSI+ZXhwb3J0PC90ZXh0Pjx0ZXh0IHg9Ijc0MCIgeT0iODUiPmVkaXQ8L3RleHQ+Cjx0ZXh0IHg9Ijg1NCIgeT0iODUiPnJlbmRlcjwvdGV4dD48dGV4dCB4PSIyODQiIHk9IjE3NSI+cGxhbjwvdGV4dD4KPC9nPgo8ZyBmaWxsPSJub25lIiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMS41IiBtYXJrZXItZW5kPSJ1cmwoI2EpIj4KPHBhdGggZD0iTTEwMCA4MEgxMjQiLz48cGF0aCBkPSJNMjE0IDgwSDIzOCIvPjxwYXRoIGQ9Ik0zMjggODBIMzUyIi8+CjxwYXRoIGQ9Ik00NDIgODBINDY2Ii8+PHBhdGggZD0iTTU1NiA4MEg1ODAiLz48cGF0aCBkPSJNNjcwIDgwSDY5NCIvPgo8cGF0aCBkPSJNNzg0IDgwSDgwOCIvPjxwYXRoIGQ9Ik04OTggODBIOTIyIi8+CjxwYXRoIGQ9Ik0xNzAgMTAwVjE3MEgyMzgiLz4KPHBhdGggZD0iTTMyOCAxNzBINTEyVjEyMCIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0IiBzdHJva2U9IiNiNDUzMDkiLz4KPC9nPgo8dGV4dCB4PSI1MjIiIHk9IjE2OCIgZmlsbD0iI2I0NTMwOSIgZm9udC1zaXplPSIxMiIgZm9udC1zdHlsZT0iaXRhbGljIj5uZWVkcyB0cmFuc2xhdGlvbj8g4oCUIGRlY2lkZWQgYWZ0ZXIgdHJhbnNjcmlwdGlvbiwgc28gU1JDX0xBTkc9YXV0byB3b3JrczwvdGV4dD4KPC9zdmc+Cg==){width=100%}
+## Pipeline
+<!-- meshfox:node id="pipeline" type="group" fold="false" -->
 
-Brackets are conditional dependencies: **translate** is in the chain only
-when `NEEDS_TRANSLATION` is true (spoken language ≠ `DST_LANG`, decided *after*
-transcription so `SRC_LANG=auto` works), **edit** only when `EDIT` is true.
-
-## Python environment
-<!-- meshfox:node id="env" -->
-
-`mlx-whisper` runs Whisper on the Apple GPU, so this tool needs Apple Silicon.
-The block is a `pyproject.toml`: `@python_venv` installs it into an isolated
-venv under `.meshfox/` and publishes its interpreter as `$PYTHON`. The first
-run downloads the packages (about a minute) and the chosen Whisper model.
-
-```toml name="setup" interpreter="@python_venv"
-[project]
-name = "subtitles-env"
-version = "0.0.0"
-requires-python = ">=3.10"
-dependencies = ["mlx-whisper"]
-```
-
-## Shared helpers
-<!-- meshfox:node id="lib" type="file" display="code" lang="python" -->
-
-[subs_lib.py](./subs_lib.py)
-
-The one file kept next to this canvas: segmentation, SRT/ASS, translation
-checks, edit-safe export. Every step below imports from it.
-
-## Paths
-<!-- meshfox:node id="paths" -->
-
-Derives every intermediate file name from `OUTPUT` and `WORK_DIR` (never next
-to the result) and publishes them as `WORDS`, `CUES`, `TRANSLATED`, `SRT`,
-`SRT_EDITED` and `ASS`.
-
-```python name="paths" interpreter="$PYTHON -u" env="OUTPUT,WORK_DIR"
-import os
-from pathlib import Path
-from subs_lib import derive_paths, vars_out
-
-E = os.environ
-Path(E["WORK_DIR"]).mkdir(parents=True, exist_ok=True)
-vars_out(**derive_paths(E["OUTPUT"], E["WORK_DIR"]))
-```
-
-## Transcribe
-<!-- meshfox:node id="transcribe" -->
+### Transcribe
+<!-- meshfox:node id="transcribe" x=0 y=0 w=360 h=60 -->
 
 Word-level transcript with `mlx-whisper`. `condition_on_previous_text` is off,
 so one hallucination on silence or music cannot poison the rest. `inputs=` /
@@ -137,41 +93,46 @@ so one hallucination on silence or music cannot poison the rest. `inputs=` /
 unchanged — also across sessions. Long videos take a while; the first run
 downloads the model.
 
-```python name="transcribe" interpreter="$PYTHON -u" env="VIDEO,WORDS,SRC_LANG,WHISPER_MODEL" inputs="$VIDEO" outputs="$WORDS"
-import os
-from subs_lib import transcribe
+```python name="transcribe-defs" extends="lib/core-defs"
+def transcribe(video: str, words_path: str, lang: str, model: str) -> None:
+    import mlx_whisper  # heavy import: only when actually transcribing
 
+    result = mlx_whisper.transcribe(
+        video,
+        path_or_hf_repo=model,
+        word_timestamps=True,
+        language=None if lang == "auto" else lang,
+        # Without this a single hallucination (silence, music) poisons every
+        # following segment.
+        condition_on_previous_text=False,
+        verbose=None,
+    )
+    segments = []
+    for s in result["segments"]:
+        segments.append({
+            "start": float(s["start"]), "end": float(s["end"]), "text": s["text"],
+            "no_speech_prob": float(s.get("no_speech_prob", 0.0)),
+            "avg_logprob": float(s.get("avg_logprob", 0.0)),
+            "compression_ratio": float(s.get("compression_ratio", 0.0)),
+            "words": [
+                {"word": w["word"], "start": float(w["start"]), "end": float(w["end"]),
+                 "probability": float(w.get("probability", 1.0))}
+                for w in s.get("words", [])
+            ],
+        })
+    write_json(words_path, {"language": result.get("language", lang), "model": model, "segments": segments})
+```
+
+```python name="transcribe" extends="transcribe-defs" env="VIDEO,WORDS,SRC_LANG,WHISPER_MODEL" inputs="$VIDEO" outputs="$WORDS"
 E = os.environ
 transcribe(E["VIDEO"], E["WORDS"], E["SRC_LANG"], E["WHISPER_MODEL"])
 ```
 
-### Transcript (`WORDS`)
-<!-- meshfox:node id="preview-words" type="file" display="code" lang="json" -->
+Not unit-tested: it needs Whisper and a video, so it was exercised end to end.
 
-[WORDS]($WORDS)
-
-Word-level transcript straight from Whisper: segments, words, per-word timestamps and probabilities.
-
-## Plan: is translation needed?
-<!-- meshfox:node id="plan" -->
-
-Compares the spoken language (the detected one when `SRC_LANG=auto`) with
-`DST_LANG` and publishes `NEEDS_TRANSLATION` and `SRC_USED`. That computed
-boolean is what the conditional dependency on **Translate** looks at.
-
-```python name="plan" interpreter="$PYTHON -u" env="WORDS,SRC_LANG,DST_LANG" deps="transcribe/transcribe"
-import os
-from subs_lib import read_json, vars_out
-
-E = os.environ
-spoken = E["SRC_LANG"]
-if spoken == "auto":  # Whisper's guess, stored with the transcript
-    spoken = read_json(E["WORDS"]).get("language") or "en"
-vars_out(SRC_USED=spoken, NEEDS_TRANSLATION="true" if spoken != E["DST_LANG"] else "false")
-```
-
-## Segment
-<!-- meshfox:node id="segment" -->
+### Segment
+<!-- meshfox:node id="segment" x=480 y=0 w=360 h=60 -->
+<!-- meshfox:edge from="transcribe" style="solid" -->
 
 Groups words into subtitle cues in the *source* language: a new cue at a long
 pause or sentence end; an over-long cue is cut at a sentence end, then a
@@ -179,10 +140,103 @@ clause break, else in the middle. Segments Whisper hallucinated (high
 no-speech probability, runaway repetition) are dropped, and cues never
 overlap.
 
-```python name="segment" interpreter="$PYTHON -u" env="WORDS,CUES" deps="transcribe/transcribe" inputs="$WORDS" outputs="$CUES"
-import os
-from subs_lib import build_cues, read_json, write_json
+```python name="segment-defs" extends="lib/core-defs"
+import re
 
+SENTENCE_END = re.compile(r"[.!?…。！？]['\")\]”’»]*$")
+CLAUSE_END = re.compile(r"[,;:—–、，；：]['\")\]”’»]*$")
+
+
+def is_hallucination(seg: dict) -> bool:
+    """Whisper invents text on silence and music. These are its tells."""
+    if seg.get("no_speech_prob", 0) > 0.6 and seg.get("avg_logprob", 0) < -1.0:
+        return True
+    return seg.get("compression_ratio", 0) > 2.4
+
+
+def _join(words: list[dict], lang: str) -> str:
+    return "".join(w["word"] for w in words).strip() if lang in CJK else \
+        re.sub(r"\s+", " ", "".join(w["word"] for w in words)).strip()
+
+
+def _best_cut(words: list[dict], lang: str, max_chars: int) -> int | None:
+    """Where to break an over-long cue: after the last sentence end, else the
+    last clause break (each only if it leaves a substantial first part), else
+    in the middle so both halves come out about equal. The last word is the
+    one that didn't fit, so it never ends up in the first part."""
+    head = words[:-1]
+    for pattern in (SENTENCE_END, CLAUSE_END):
+        for j in range(len(head) - 1, 0, -1):
+            if pattern.search(head[j - 1]["word"].strip()) and len(_join(head[:j], lang)) >= max_chars * 0.3:
+                return j
+    half = len(_join(words, lang)) / 2
+    return min(range(1, len(head) + 1), key=lambda j: abs(len(_join(head[:j], lang)) - half))
+
+
+def build_cues(segments: list[dict], lang: str, *, max_chars: int | None = None,
+               max_dur: float = 6.5, max_gap: float = 0.7, min_chars: int = 12) -> list[dict]:
+    """Group word timestamps into subtitle cues.
+
+    A cue ends at a long pause, at the end of a sentence (once it has some
+    substance), or when it would no longer fit on two lines / stay on screen
+    too long -- then at the last clause break if there is a reasonable one.
+    """
+    max_chars = max_chars or (36 if lang in CJK else 84)
+    words = [w for s in segments if not is_hallucination(s) for w in s.get("words", [])
+             if w["word"].strip()]
+    cues: list[list[dict]] = []
+    cur: list[dict] = []
+
+    def flush(upto: int | None = None) -> None:
+        nonlocal cur
+        take, cur = (cur, []) if upto is None else (cur[:upto], cur[upto:])
+        if take:
+            cues.append(take)
+
+    for w in words:
+        if cur:
+            too_long = len(_join(cur + [w], lang)) > max_chars or w["end"] - cur[0]["start"] > max_dur
+            if w["start"] - cur[-1]["end"] > max_gap:
+                flush()
+            elif too_long:
+                flush(_best_cut(cur + [w], lang, max_chars) if len(cur) > 1 else None)
+        cur.append(w)
+        if SENTENCE_END.search(w["word"].strip()) and len(_join(cur, lang)) >= min_chars:
+            flush()
+    flush()
+
+    # Merge fragments that are too small to read into a neighbour.
+    merged: list[list[dict]] = []
+    for c in cues:
+        if (merged and (len(_join(c, lang)) < 8 or c[-1]["end"] - c[0]["start"] < 0.8)
+                and c[0]["start"] - merged[-1][-1]["end"] <= max_gap
+                and len(_join(merged[-1] + c, lang)) <= max_chars
+                and not SENTENCE_END.search(merged[-1][-1]["word"].strip())):
+            merged[-1] = merged[-1] + c
+        else:
+            merged.append(c)
+
+    out = []
+    for c in merged:
+        out.append({"start": c[0]["start"], "end": c[-1]["end"], "text": _join(c, lang)})
+    # Collapse the same line repeated over and over (another whisper habit).
+    dedup: list[dict] = []
+    for cue in out:
+        if len(dedup) >= 2 and cue["text"] == dedup[-1]["text"] == dedup[-2]["text"]:
+            continue
+        dedup.append(cue)
+    # Tidy timing: readable minimum, never overlapping the next cue.
+    for k, cue in enumerate(dedup):
+        cue["end"] = max(cue["end"], cue["start"] + 0.6)
+        if k + 1 < len(dedup):
+            cue["end"] = min(cue["end"], dedup[k + 1]["start"])
+        cue["end"] = max(cue["end"], cue["start"] + 0.2)
+        cue["i"] = k + 1
+        cue["start"], cue["end"] = round(cue["start"], 3), round(cue["end"], 3)
+    return [{"i": c["i"], "start": c["start"], "end": c["end"], "text": c["text"]} for c in dedup]
+```
+
+```python name="segment" extends="segment-defs" env="WORDS,CUES" deps="transcribe/transcribe" inputs="$WORDS" outputs="$CUES"
 E = os.environ
 data = read_json(E["WORDS"])
 cues = build_cues(data["segments"], data.get("language", "en"))
@@ -190,15 +244,95 @@ write_json(E["CUES"], cues)
 print(f"{len(cues)} cues -> {E['CUES']}")
 ```
 
-### Cues (`CUES`)
-<!-- meshfox:node id="preview-cues" type="file" display="code" lang="json" -->
+Tests for the segmentation: pauses, sentence ends, balanced splits, hallucination filtering, CJK, overlap.
 
-[CUES]($CUES)
+```python name="segment-test" extends="segment-defs"
+import unittest
 
-The transcript cut into subtitle cues, in the spoken language. This is what the translation step reads.
 
-## Translate
-<!-- meshfox:node id="translate" color="6" tags="optional,agent" -->
+def words(text: str, start: float = 0.0, step: float = 0.4, gap_before: dict | None = None):
+    """Fake word timestamps; `gap_before` = {word_index: extra silence}."""
+    out, t = [], start
+    for i, w in enumerate(text.split()):
+        t += (gap_before or {}).get(i, 0)
+        out.append({"word": " " + w, "start": round(t, 3), "end": round(t + step * 0.9, 3), "probability": 0.9})
+        t += step
+    return out
+
+
+def seg(ws, **kw):
+    return {"start": ws[0]["start"], "end": ws[-1]["end"], "text": "", "words": ws,
+            "no_speech_prob": 0.0, "avg_logprob": -0.2, "compression_ratio": 1.2, **kw}
+
+
+class SegmentTests(unittest.TestCase):
+    def test_long_pause_starts_a_new_cue(self):
+        cues = build_cues([seg(words("one two three four five six", gap_before={3: 2.0}))], "en")
+        self.assertEqual([c["text"] for c in cues], ["one two three", "four five six"])
+
+    def test_sentence_end_splits_once_cue_has_substance(self):
+        cues = build_cues([seg(words("Hello everyone. Today we talk about subtitles."))], "en")
+        self.assertEqual([c["text"] for c in cues], ["Hello everyone.", "Today we talk about subtitles."])
+
+    def test_tiny_sentence_is_merged_not_left_alone(self):
+        cues = build_cues([seg(words("Yes. We can do that for you today."))], "en")
+        self.assertEqual(len(cues), 1)
+
+    def test_overlong_sentence_splits_into_balanced_halves(self):
+        text = "Today we are going to talk about how to build a small tool that translates subtitles."
+        cues = build_cues([seg(words(text, step=0.2))], "en")
+        self.assertEqual(len(cues), 2)
+        self.assertTrue(all(len(c["text"]) <= 84 for c in cues))
+        self.assertLess(abs(len(cues[0]["text"]) - len(cues[1]["text"])), 25)
+
+    def test_prefers_clause_break_when_splitting(self):
+        text = "It is surprisingly simple, and it works really well even on very long videos like this one."
+        cues = build_cues([seg(words(text, step=0.2))], "en", max_chars=60)
+        self.assertEqual(cues[0]["text"], "It is surprisingly simple,")
+
+    def test_hallucinated_segments_are_dropped(self):
+        good = seg(words("A real sentence of speech."))
+        silence = seg(words("Thanks for watching!", start=20), no_speech_prob=0.9, avg_logprob=-1.5)
+        loop = seg(words("la la la la", start=30), compression_ratio=3.0)
+        cues = build_cues([good, silence, loop], "en")
+        self.assertEqual([c["text"] for c in cues], ["A real sentence of speech."])
+
+    def test_cjk_words_are_joined_without_spaces(self):
+        ws = [{"word": c, "start": i * 0.2, "end": i * 0.2 + 0.15, "probability": 1} for i, c in enumerate("你好世界。")]
+        self.assertEqual(build_cues([seg(ws)], "zh")[0]["text"], "你好世界。")
+
+    def test_cues_are_ordered_numbered_and_never_overlap(self):
+        cues = build_cues([seg(words("a b c d e f g h i j k l m n o p", gap_before={5: 1, 10: 1}))], "en")
+        self.assertEqual([c["i"] for c in cues], list(range(1, len(cues) + 1)))
+        for a, b in zip(cues, cues[1:]):
+            self.assertLessEqual(a["end"], b["start"] + 1e-9)
+            self.assertGreater(a["end"], a["start"])
+
+    def test_short_cue_is_stretched_but_not_into_the_next_one(self):
+        def w(word, a, b):
+            return {"word": " " + word, "start": a, "end": b, "probability": 1}
+        # A very quick "Hello there everyone." (0.3 s) followed at 0.4 s by the next sentence.
+        ws = [w("Hello", 0.0, 0.1), w("there", 0.1, 0.2), w("everyone.", 0.2, 0.3),
+              w("Next", 0.4, 0.6), w("sentence", 0.6, 0.9), w("is", 0.9, 1.0), w("here.", 1.0, 1.4)]
+        cues = build_cues([seg(ws)], "en")
+        self.assertEqual(len(cues), 2)
+        self.assertEqual(cues[0]["end"], 0.4)          # wanted 0.6, capped at the next start
+
+    def test_triple_repeat_is_collapsed(self):
+        ws = []
+        for k in range(4):
+            ws += words("See you next time.", start=k * 10)
+        cues = build_cues([seg(ws)], "en")
+        self.assertEqual(len([c for c in cues if c["text"] == "See you next time."]), 2)
+
+
+unittest.main(argv=["segment-test"], verbosity=2)
+```
+
+### Translate
+<!-- meshfox:node id="translate" x=960 y=-150 w=360 h=60 color="6" tags="optional,agent" -->
+<!-- meshfox:edge from="segment" style="solid" -->
+<!-- meshfox:edge from="plan" label="?NEEDS_TRANSLATION" color="6" sourceSide="right" targetSide="left" -->
 
 Optional: runs only when `NEEDS_TRANSLATION` is true. The translation is done
 by your coding agent in an **interactive session**: an `@agent` block with
@@ -255,10 +389,33 @@ Rules:
 When the file is written, tell me in one short line that I can exit.
 ```
 
-```python name="check" interpreter="$PYTHON -u" env="CUES,TRANSLATED" deps="translate"
-import os, sys
-from subs_lib import check_translation, read_json
+```python name="check-defs" interpreter="$PYTHON -u"
+def check_translation(cues: list[dict], translated) -> list[str]:
+    """Return a list of problems (empty = fine). The agent is told to keep a
+    strict 1:1 mapping by index; this is where we make sure it did."""
+    if not isinstance(translated, list):
+        return ["the translation must be a JSON list of {i, text} objects"]
+    problems = []
+    want = [c["i"] for c in cues]
+    got = [t.get("i") if isinstance(t, dict) else None for t in translated]
+    if got != want:
+        missing = sorted(set(want) - set(got))
+        extra = sorted(x for x in set(got) if x not in set(want))
+        problems.append(f"indices differ from the source: {len(got)} given, {len(want)} expected"
+                        + (f"; missing {missing[:10]}" if missing else "")
+                        + (f"; unexpected {extra[:10]}" if extra else "")
+                        + ("; or out of order / duplicated" if not missing and not extra else ""))
+        return problems
+    for c, t in zip(cues, translated):
+        text = t.get("text")
+        if not isinstance(text, str) or not text.strip():
+            problems.append(f"cue {c['i']}: empty translation of {c['text']!r}")
+        elif len(text) > max(40, len(c["text"])) * 3:
+            problems.append(f"cue {c['i']}: translation is suspiciously long ({len(text)} vs {len(c['text'])} chars)")
+    return problems
+```
 
+```python name="check" extends="lib/core-defs,check-defs" env="CUES,TRANSLATED" deps="translate"
 E = os.environ
 if os.path.getmtime(E["TRANSLATED"]) < os.path.getmtime(E["CUES"]):
     sys.exit("the translation file is older than the cues: the agent session ended without writing a new one")
@@ -269,19 +426,47 @@ if problems:
 print(f"translation ok ({len(cues)} cues)")
 ```
 
+The checks are tested without any agent:
+
+```python name="check-test" extends="check-defs"
+import unittest
+
+
+class CheckTests(unittest.TestCase):
+    CUES = [{"i": 1, "text": "Hello"}, {"i": 2, "text": "World"}]
+
+    def ok(self, tr):
+        return check_translation(self.CUES, tr)
+
+    def test_accepts_matching_translation(self):
+        self.assertEqual(self.ok([{"i": 1, "text": "Привет"}, {"i": 2, "text": "Мир"}]), [])
+
+    def test_rejects_missing_cue(self):
+        self.assertIn("missing [2]", self.ok([{"i": 1, "text": "Привет"}])[0])
+
+    def test_rejects_wrong_order_or_duplicates(self):
+        self.assertTrue(self.ok([{"i": 2, "text": "Мир"}, {"i": 1, "text": "Привет"}]))
+        self.assertTrue(self.ok([{"i": 1, "text": "a"}, {"i": 1, "text": "b"}]))
+
+    def test_rejects_empty_text_and_non_list(self):
+        self.assertIn("empty translation", self.ok([{"i": 1, "text": "  "}, {"i": 2, "text": "Мир"}])[0])
+        self.assertTrue(self.ok({"i": 1}))
+
+    def test_rejects_runaway_length(self):
+        self.assertIn("suspiciously long", self.ok([{"i": 1, "text": "x" * 500}, {"i": 2, "text": "Мир"}])[0])
+
+
+unittest.main(argv=["check-test"], verbosity=2)
+```
+
 If **check** reports a problem (a missing or reordered index, an empty line,
 a runaway length), the run stops there — run **Translate** again; nothing
 downstream has been touched.
 
-### Translated cues (`TRANSLATED`)
-<!-- meshfox:node id="preview-translated" type="file" display="code" lang="json" -->
-
-[TRANSLATED]($TRANSLATED)
-
-The agent's translation, one object per cue, same `i`. Exists only when translation was needed.
-
-## Export
-<!-- meshfox:node id="export" -->
+### Export
+<!-- meshfox:node id="export" x=1440 y=0 w=360 h=60 -->
+<!-- meshfox:edge from="translate" label="if translated" color="6" -->
+<!-- meshfox:edge from="segment" style="solid" -->
 
 Writes the generated `.srt`: the translation when one was made, the original
 cues otherwise, lines wrapped to at most two balanced lines. It is a plain
@@ -289,10 +474,78 @@ function of the cues, so it is rewritten whenever they change; your own edits go
 to a copy made by **Edit**, never here. As a safeguard, a file that no longer
 matches the sidecar (`*.srt.generated`) is left alone — delete it to regenerate.
 
-```python name="export" interpreter="$PYTHON -u" env="CUES,TRANSLATED,SRT,NEEDS_TRANSLATION,SRC_USED,SRC_LANG,DST_LANG" deps="segment/segment,translate/check?NEEDS_TRANSLATION" outputs="$SRT"
-import os
-from subs_lib import env_flag, export_srt, read_json
+```python name="srt-defs" extends="lib/core-defs"
+import re
 
+
+def fmt_srt_time(t: float) -> str:
+    ms = int(round(t * 1000))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02}:{m:02}:{s:02},{ms:03}"
+
+
+def parse_srt_time(s: str) -> float:
+    m = re.fullmatch(r"\s*(\d+):(\d{2}):(\d{2})[,.](\d{1,3})\s*", s)
+    if not m:
+        raise ValueError(f"bad SRT timestamp: {s!r}")
+    h, mi, se, ms = m.groups()
+    return int(h) * 3600 + int(mi) * 60 + int(se) + int(ms.ljust(3, "0")) / 1000
+
+
+def wrap_text(text: str, lang: str, width: int = 42) -> str:
+    """At most two balanced lines (a lone word on line two reads badly)."""
+    if lang in CJK or "\n" in text or len(text) <= width:
+        return text
+    spaces = [m.start() for m in re.finditer(" ", text)]
+    if not spaces:
+        return text
+    cut = min(spaces, key=lambda p: abs(p - len(text) / 2))
+    return text[:cut] + "\n" + text[cut + 1:]
+
+
+def to_srt(cues: list[dict], lang: str) -> str:
+    blocks = []
+    for n, c in enumerate(cues, 1):
+        blocks.append(f"{n}\n{fmt_srt_time(c['start'])} --> {fmt_srt_time(c['end'])}\n{wrap_text(c['text'], lang)}\n")
+    return "\n".join(blocks)
+
+
+def parse_srt(text: str) -> list[dict]:
+    cues = []
+    for block in re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip()):
+        lines = [ln for ln in block.split("\n")]
+        if len(lines) < 2:
+            continue
+        k = 1 if "-->" not in lines[0] else 0
+        a, _, b = lines[k].partition("-->")
+        cues.append({"start": parse_srt_time(a), "end": parse_srt_time(b),
+                     "text": "\n".join(lines[k + 1:]).strip()})
+    return cues
+
+
+def export_srt(cues: list[dict], translated, srt_path: str, *, use_translated: bool, lang: str) -> str:
+    """Write the editable SRT -- but never clobber the user's own edits.
+
+    A sidecar remembers the hash of what we last generated. If the file on disk
+    differs from that, someone edited it, and it is left alone (delete it to
+    regenerate)."""
+    if use_translated:
+        by_i = {t["i"]: t["text"] for t in translated}
+        cues = [{**c, "text": by_i[c["i"]]} for c in cues]
+    content = to_srt(cues, lang)
+    path, side = Path(srt_path), Path(srt_path + ".generated")
+    if path.exists() and side.exists() and sha(path.read_bytes()) != side.read_text().strip():
+        return "kept"      # edited by hand
+    if path.exists() and not side.exists():
+        return "kept"      # not ours
+    path.write_text(content, encoding="utf-8")
+    side.write_text(sha(content.encode("utf-8")) + "\n")
+    return "written"
+```
+
+```python name="export" extends="srt-defs" env="CUES,TRANSLATED,SRT,NEEDS_TRANSLATION,SRC_USED,SRC_LANG,DST_LANG" deps="segment/segment,translate/check?NEEDS_TRANSLATION" outputs="$SRT"
 E = os.environ
 use = env_flag("NEEDS_TRANSLATION")
 lang = E["DST_LANG"] if use else (E.get("SRC_USED") or E["SRC_LANG"])
@@ -301,15 +554,73 @@ res = export_srt(read_json(E["CUES"]), read_json(E["TRANSLATED"]) if use else No
 print(f"{E['SRT']}: {'kept your edits' if res == 'kept' else 'written'}")
 ```
 
-### Generated subtitles (`SRT`)
-<!-- meshfox:node id="preview-srt" type="file" display="code" lang="text" -->
+The SRT functions are also what **Render** reads the subtitles back with (it extends `export/srt-defs`). Tests: the timestamp format, round trip, and the guarantee that hand edits survive a re-export.
 
-[SRT]($SRT)
+```python name="srt-test" extends="srt-defs"
+import unittest
+from tempfile import TemporaryDirectory
 
-The generated subtitles: what **Edit** starts from and, without editing, what **Render** burns in.
 
-## Edit (optional)
-<!-- meshfox:node id="edit" color="6" tags="optional,interactive" -->
+class SrtTests(unittest.TestCase):
+    def test_roundtrip(self):
+        cues = [{"start": 0.0, "end": 1.5, "text": "Hello"}, {"start": 3661.25, "end": 3662.0, "text": "two\nlines"}]
+        back = parse_srt(to_srt(cues, "ru"))
+        self.assertEqual([(c["start"], c["end"], c["text"]) for c in back],
+                         [(0.0, 1.5, "Hello"), (3661.25, 3662.0, "two\nlines")])
+
+    def test_timestamp_format(self):
+        self.assertEqual(fmt_srt_time(3723.456), "01:02:03,456")
+
+    def test_parse_tolerates_crlf_and_missing_index(self):
+        text = "00:00:01,000 --> 00:00:02,000\r\nHi\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nThere\r\n"
+        self.assertEqual([c["text"] for c in parse_srt(text)], ["Hi", "There"])
+
+    def test_wrap_balances_two_lines(self):
+        out = wrap_text("Today we are going to talk about how to build", "en")
+        a, b = out.split("\n")
+        self.assertLess(abs(len(a) - len(b)), 8)
+        self.assertEqual(wrap_text("short", "en"), "short")
+
+
+class ExportTests(unittest.TestCase):
+    CUES = [{"i": 1, "start": 0, "end": 1, "text": "Hello"}, {"i": 2, "start": 1, "end": 2, "text": "World"}]
+    TR = [{"i": 1, "text": "Привет"}, {"i": 2, "text": "Мир"}]
+
+    def test_uses_translation_when_asked(self):
+        with TemporaryDirectory() as d:
+            srt = str(Path(d) / "x.srt")
+            self.assertEqual(export_srt(self.CUES, self.TR, srt, use_translated=True, lang="ru"), "written")
+            self.assertIn("Привет", Path(srt).read_text())
+
+    def test_regenerates_an_untouched_file(self):
+        with TemporaryDirectory() as d:
+            srt = str(Path(d) / "x.srt")
+            export_srt(self.CUES, None, srt, use_translated=False, lang="en")
+            self.assertEqual(export_srt(self.CUES, self.TR, srt, use_translated=True, lang="ru"), "written")
+            self.assertIn("Мир", Path(srt).read_text())
+
+    def test_never_overwrites_hand_edits(self):
+        with TemporaryDirectory() as d:
+            srt = Path(d) / "x.srt"
+            export_srt(self.CUES, None, str(srt), use_translated=False, lang="en")
+            srt.write_text(srt.read_text().replace("World", "Everybody"))
+            self.assertEqual(export_srt(self.CUES, self.TR, str(srt), use_translated=True, lang="ru"), "kept")
+            self.assertIn("Everybody", srt.read_text())
+
+    def test_does_not_adopt_a_foreign_srt(self):
+        with TemporaryDirectory() as d:
+            srt = Path(d) / "x.srt"
+            srt.write_text("mine")
+            self.assertEqual(export_srt(self.CUES, None, str(srt), use_translated=False, lang="en"), "kept")
+            self.assertEqual(srt.read_text(), "mine")
+
+
+unittest.main(argv=["srt-test"], verbosity=2)
+```
+
+### Edit (optional)
+<!-- meshfox:node id="edit" x=1920 y=0 w=360 h=60 color="6" tags="optional,interactive" -->
+<!-- meshfox:edge from="export" style="solid" -->
 
 Runs only when `EDIT` is true: **Render** reaches it through the conditional
 dependency `deps="edit/edit?EDIT"`. A `tty` block that hands the terminal to
@@ -346,15 +657,10 @@ fi
 $EDITOR_CMD "$SRT_EDITED"
 ```
 
-### Edited subtitles (`SRT_EDITED`)
-<!-- meshfox:node id="preview-srt-edited" type="file" display="code" lang="text" -->
-
-[SRT_EDITED]($SRT_EDITED)
-
-Your copy of the subtitles: what **Render** burns in when `EDIT` is true. It exists once **Edit** has run.
-
-## Render
-<!-- meshfox:node id="render" -->
+### Render
+<!-- meshfox:node id="render" x=2400 y=0 w=360 h=60 -->
+<!-- meshfox:edge from="edit" label="?EDIT" color="6" -->
+<!-- meshfox:edge from="export" style="solid" -->
 
 `.srt` → `.ass` (styled and sized to the video's real resolution), then burned
 into the video, audio re-encoded to AAC. It prefers `ffmpeg` when it has the
@@ -370,10 +676,109 @@ the conditional dependency `edit/edit?EDIT` is on; when `EDIT` is false that
 input is ignored. Nothing else forces a re-render, so it runs again only when
 the subtitles, the video or a style option actually changed.
 
-```python name="render" interpreter="$PYTHON -u" env="SRT,SRT_EDITED,EDIT,ASS,VIDEO,OUTPUT,SUB_FONT,SUB_SIZE,SUB_POS,SUB_MARGIN,SUB_COLOR" deps="edit/edit?EDIT" inputs="$SRT,$SRT_EDITED,$VIDEO" outputs="$OUTPUT"
-import os
-from subs_lib import env_flag, render
+```python name="render-defs" extends="export/srt-defs"
+import shutil
+import subprocess
+import tempfile
 
+
+def esc_ass(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", "\\N")
+
+
+def fmt_ass_time(t: float) -> str:
+    cs = int(round(t * 100))
+    h, cs = divmod(cs, 360_000)
+    m, cs = divmod(cs, 6000)
+    s, cs = divmod(cs, 100)
+    return f"{h}:{m:02}:{s:02}.{cs:02}"
+
+
+ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}  # ASS numpad alignment, centred
+
+
+def ass_color(hex_rgb: str) -> str:
+    """'#RRGGBB' -> ASS '&H00BBGGRR'."""
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", hex_rgb.strip())
+    if not m:
+        raise SystemExit(f"SUB_COLOR must look like #FFFFFF, got {hex_rgb!r}")
+    r, g, b = m.group(1)[0:2], m.group(1)[2:4], m.group(1)[4:6]
+    return f"&H00{b}{g}{r}".upper()
+
+
+def to_ass(cues: list[dict], *, width: int, height: int, font: str, size_pct: float = 5.5,
+           pos: str = "bottom", margin_pct: float = 5.0, color: str = "#FFFFFF") -> str:
+    """Sizes and margins are percentages of the video height, so one setting
+    looks the same on 720p, 4K and portrait video."""
+    if pos not in ALIGNMENT:
+        raise SystemExit(f"SUB_POS must be one of {', '.join(ALIGNMENT)}, got {pos!r}")
+    if not 1 <= size_pct <= 25:
+        raise SystemExit(f"SUB_SIZE must be between 1 and 25 (% of the video height), got {size_pct}")
+    if not 0 <= margin_pct <= 45:
+        raise SystemExit(f"SUB_MARGIN must be between 0 and 45 (% of the video height), got {margin_pct}")
+    size = round(height * size_pct / 100)
+    margin_v = round(height * margin_pct / 100)
+    return "\n".join([
+        "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}",
+        "WrapStyle: 0", "ScaledBorderAndShadow: yes", "",
+        "[V4+ Styles]",
+        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,"
+        "Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
+        f"Style: Default,{font},{size},{ass_color(color)},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,"
+        f"{max(2, round(size / 14))},0,{ALIGNMENT[pos]},{round(width * 0.05)},{round(width * 0.05)},{margin_v},1",
+        "", "[Events]", "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
+        *[f"Dialogue: 0,{fmt_ass_time(c['start'])},{fmt_ass_time(c['end'])},Default,,0,0,0,,{esc_ass(c['text'])}"
+          for c in cues],
+        "",
+    ])
+
+
+def video_size(video: str) -> tuple[int, int]:
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+             "-of", "csv=p=0:s=x", video], capture_output=True, text=True, check=True).stdout.strip()
+        w, h = out.split("x")
+        return int(w), int(h)
+    except Exception:
+        return 1920, 1080
+
+
+def ffmpeg_has_libass() -> bool:
+    try:
+        out = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    except FileNotFoundError:
+        return False
+    return bool(re.search(r"^\s*\S+\s+subtitles\s", out, re.M))
+
+
+def render_command(video: str, ass: str, output: str, *, tool: str) -> list[str]:
+    """`ass` must be a plain relative name (we run in a temp dir) -- no
+    filter-escaping of odd characters in paths."""
+    if tool == "ffmpeg":
+        return ["ffmpeg", "-y", "-loglevel", "error", "-i", video, "-vf", f"ass={ass}",
+                "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "copy", output]
+    return ["mpv", "--no-config", "--really-quiet", video, f"--sub-file={ass}", "--sid=auto",
+            "--no-sub-auto", "--o=" + output, "--ovc=libx264", "--ovcopts=crf=18,preset=medium",
+            "--oac=aac", "--oacopts=b=192k"]
+
+
+def render(srt: str, video: str, output: str, font: str, ass_out: str, **style) -> str:
+    cues = parse_srt(Path(srt).read_text(encoding="utf-8"))
+    w, h = video_size(video)
+    Path(ass_out).write_text(to_ass(cues, width=w, height=h, font=font, **style), encoding="utf-8")
+    tool = "ffmpeg" if ffmpeg_has_libass() else "mpv"
+    if tool == "mpv" and not shutil.which("mpv"):
+        raise SystemExit("neither an ffmpeg with libass (the `subtitles` filter) nor mpv is available")
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copy(ass_out, Path(tmp) / "sub.ass")
+        cmd = render_command(str(Path(video).resolve()), "sub.ass", str(Path(output).resolve()), tool=tool)
+        subprocess.run(cmd, cwd=tmp, check=True)
+    return tool
+```
+
+```python name="render" extends="render-defs" env="SRT,SRT_EDITED,EDIT,ASS,VIDEO,OUTPUT,SUB_FONT,SUB_SIZE,SUB_POS,SUB_MARGIN,SUB_COLOR" deps="edit/edit?EDIT" inputs="$SRT,$SRT_EDITED,$VIDEO" outputs="$OUTPUT"
 E = os.environ
 srt = E["SRT_EDITED"] if env_flag("EDIT") else E["SRT"]
 tool = render(srt, E["VIDEO"], E["OUTPUT"], E["SUB_FONT"], E["ASS"],
@@ -382,14 +787,281 @@ tool = render(srt, E["VIDEO"], E["OUTPUT"], E["SUB_FONT"], E["ASS"],
 print(f"rendered with {tool} -> {E['OUTPUT']}")
 ```
 
+Tests for the ASS script, the encoder command lines and the style options (the encoding itself needs a video, so it is exercised end to end):
+
+```python name="render-test" extends="render-defs"
+import unittest
+
+
+class RenderTests(unittest.TestCase):
+    def test_ass_escapes_and_sizes_to_the_video(self):
+        ass = to_ass([{"start": 0, "end": 1.5, "text": "a {b}\nc \\ d"}], width=1280, height=720, font="Arial")
+        self.assertIn("PlayResX: 1280", ass)
+        self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.50,Default,,0,0,0,,a \\{b\\}\\Nc \\\\ d", ass)
+        self.assertIn("Style: Default,Arial,40,", ass)
+
+    def test_ffmpeg_command_uses_a_plain_relative_ass_name(self):
+        cmd = render_command("/v/a b (1).mp4", "sub.ass", "/o/out.mp4", tool="ffmpeg")
+        self.assertIn("ass=sub.ass", cmd)
+        self.assertEqual(cmd[cmd.index("-i") + 1], "/v/a b (1).mp4")   # path passed as one argv item
+
+    def test_mpv_command_keeps_audio_and_picks_our_subs_only(self):
+        cmd = render_command("/v/a.mp4", "sub.ass", "/o/out.mp4", tool="mpv")
+        self.assertIn("--sub-file=sub.ass", cmd)
+        self.assertIn("--no-sub-auto", cmd)
+        self.assertIn("--oac=aac", cmd)
+
+    def test_default_style_is_unchanged(self):
+        ass = to_ass([{"start": 0, "end": 1, "text": "a"}], width=1080, height=1920, font="Arial")
+        self.assertIn("Style: Default,Arial,106,&H00FFFFFF,", ass)
+        self.assertIn(",2,54,54,96,1", ass)  # bottom-centre, 5% margins
+
+    def test_style_options(self):
+        ass = to_ass([{"start": 0, "end": 1, "text": "a"}], width=1000, height=1000, font="X",
+                          size_pct=4, pos="top", margin_pct=10, color="#FFCC00")
+        self.assertIn("Style: Default,X,40,&H0000CCFF,", ass)  # ASS colours are BGR
+        self.assertIn(",8,50,50,100,1", ass)
+
+    def test_style_rejects_nonsense(self):
+        cue = [{"start": 0, "end": 1, "text": "a"}]
+        for kw in ({"pos": "left"}, {"size_pct": 0}, {"size_pct": 90}, {"margin_pct": -1}, {"color": "red"}):
+            with self.assertRaises(SystemExit):
+                to_ass(cue, width=100, height=100, font="X", **kw)
+
+
+unittest.main(argv=["render-test"], verbosity=2)
+```
+
+### Plan: is translation needed?
+<!-- meshfox:node id="plan" x=360 y=-150 w=360 h=60 -->
+<!-- meshfox:edge from="transcribe" style="solid" sourceSide="top" targetSide="left" -->
+
+Compares the spoken language (the detected one when `SRC_LANG=auto`) with
+`DST_LANG` and publishes `NEEDS_TRANSLATION` and `SRC_USED`. That computed
+boolean is what the conditional dependency on **Translate** looks at.
+
+```python name="plan" extends="lib/core-defs" env="WORDS,SRC_LANG,DST_LANG" deps="transcribe/transcribe"
+E = os.environ
+spoken = E["SRC_LANG"]
+if spoken == "auto":  # Whisper's guess, stored with the transcript
+    spoken = read_json(E["WORDS"]).get("language") or "en"
+vars_out(SRC_USED=spoken, NEEDS_TRANSLATION="true" if spoken != E["DST_LANG"] else "false")
+```
+
+### Transcript (`WORDS`)
+<!-- meshfox:node id="preview-words" type="file" x=0 y=150 w=360 h=60 display="code" lang="json" -->
+<!-- meshfox:edge from="transcribe"  sourceSide="bottom" targetSide="top" style="solid" -->
+
+[WORDS]($WORDS)
+
+Word-level transcript straight from Whisper: segments, words, per-word timestamps and probabilities.
+
+### Cues (`CUES`)
+<!-- meshfox:node id="preview-cues" type="file" x=480 y=150 w=360 h=60 display="code" lang="json" -->
+<!-- meshfox:edge from="segment"  sourceSide="bottom" targetSide="top" style="solid" -->
+
+[CUES]($CUES)
+
+The transcript cut into subtitle cues, in the spoken language. This is what the translation step reads.
+
+### Translated cues (`TRANSLATED`)
+<!-- meshfox:node id="preview-translated" type="file" x=960 y=150 w=360 h=60 display="code" lang="json" -->
+<!-- meshfox:edge from="translate"  sourceSide="bottom" targetSide="top" style="solid" -->
+
+[TRANSLATED]($TRANSLATED)
+
+The agent's translation, one object per cue, same `i`. Exists only when translation was needed.
+
+### Generated subtitles (`SRT`)
+<!-- meshfox:node id="preview-srt" type="file" x=1440 y=150 w=360 h=60 display="code" lang="text" -->
+<!-- meshfox:edge from="export"  sourceSide="bottom" targetSide="top" style="solid" -->
+
+[SRT]($SRT)
+
+The generated subtitles: what **Edit** starts from and, without editing, what **Render** burns in.
+
+### Edited subtitles (`SRT_EDITED`)
+<!-- meshfox:node id="preview-srt-edited" type="file" x=1920 y=150 w=360 h=60 display="code" lang="text" -->
+<!-- meshfox:edge from="edit"  sourceSide="bottom" targetSide="top" style="solid" -->
+
+[SRT_EDITED]($SRT_EDITED)
+
+Your copy of the subtitles: what **Render** burns in when `EDIT` is true. It exists once **Edit** has run.
+
 ### Burn-in script (`ASS`)
-<!-- meshfox:node id="preview-ass" type="file" display="code" lang="text" -->
+<!-- meshfox:node id="preview-ass" type="file" x=2400 y=150 w=360 h=60 display="code" lang="text" -->
+<!-- meshfox:edge from="render"  sourceSide="bottom" targetSide="top" style="solid" -->
 
 [ASS]($ASS)
 
 Styled and sized to the video, regenerated by **Render** on every run.
 
-## Design note: a subtitle editor in the middle
+### Result (OUTPUT)
+<!-- meshfox:node id="result-output" type="file" x=2880 y=0 w=360 -->
+<!-- meshfox:edge from="render" -->
+
+[OUTPUT]($OUTPUT)
+
+The finished video with the subtitles burned in, written by **Render** where you asked for it.
+
+## Tech details
+<!-- meshfox:node id="tech-details" -->
+
+The environment, shared code, path handling and tests: everything the pipeline steps rely on.
+
+### Python environment
+<!-- meshfox:node id="env" -->
+
+`mlx-whisper` runs Whisper on the Apple GPU, so this tool needs Apple Silicon.
+The block is a `pyproject.toml`: `@python_venv` installs it into an isolated
+venv under `.meshfox/` and publishes its interpreter as `$PYTHON`. The first
+run downloads the packages (about a minute) and the chosen Whisper model.
+
+```toml name="setup" interpreter="@python_venv"
+[project]
+name = "subtitles-env"
+version = "0.0.0"
+requires-python = ">=3.10"
+dependencies = ["mlx-whisper"]
+```
+
+### Shared helpers
+<!-- meshfox:node id="lib" -->
+
+The helpers every step uses: reading the environment, handing values on to
+meshfox through `MESHFOX_VARS_OUT`, JSON, hashing. They are ordinary code, kept
+in this one block; a step does not import it. Instead a block that writes
+`extends="lib/core-defs"` runs with this block's text in front of its own (see
+the `extends=` recipe in meshfox's README), so what is defined here is simply
+there for it. This block is only borrowed from: it does nothing when run. It begins with
+`from __future__ import annotations`, so it always comes first in an
+`extends=` list.
+
+The rest of the code lives next to the step that owns it, in a `*-defs` block
+the step and its tests both extend. That keeps a function, the step that uses
+it and its tests on one screen, and — because the code is part of each block —
+editing a function makes exactly the steps that use it stale, which a separate
+helper file never could.
+
+```python name="core-defs" interpreter="$PYTHON -u"
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+CJK = {"zh", "ja", "ko"}
+
+
+def vars_out(**kv: str) -> None:
+    """Publish values to meshfox (`meshfox:var ... from=`), or print them."""
+    target = os.environ.get("MESHFOX_VARS_OUT")
+    lines = "".join(f"{k}={v}\n" for k, v in kv.items())
+    if target:
+        with open(target, "a", encoding="utf-8") as f:
+            f.write(lines)
+    sys.stdout.write(lines)
+
+
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def sha(data: str | bytes) -> str:
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def read_json(path: str | Path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def write_json(path: str | Path, obj) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+```
+
+### Paths
+<!-- meshfox:node id="paths" -->
+
+Derives every intermediate file name from `OUTPUT` and `WORK_DIR` (never next
+to the result) and publishes them as `WORDS`, `CUES`, `TRANSLATED`, `SRT`,
+`SRT_EDITED` and `ASS`.
+
+```python name="paths-defs" extends="lib/core-defs"
+def derive_paths(output: str, work_dir: str) -> dict[str, str]:
+    """Intermediate files live in `work_dir`, never next to the result (a
+    player would auto-load `out.srt` / `out.ass` beside `out.mp4` on top of the
+    burned-in subtitles). Named after OUTPUT's stem plus a short hash of its
+    full path, so two outputs called `talk.mp4` do not share state."""
+    out = Path(output).expanduser().resolve()
+    tag = hashlib.sha1(str(out).encode("utf-8")).hexdigest()[:8]
+    stem = str(Path(work_dir).expanduser().resolve() / f"{out.stem}-{tag}")
+    return {
+        "WORDS": stem + ".words.json",
+        "CUES": stem + ".cues.json",
+        "TRANSLATED": stem + ".cues.translated.json",
+        "SRT": stem + ".srt",
+        "SRT_EDITED": stem + ".edited.srt",
+        "ASS": stem + ".ass",
+    }
+```
+
+The step itself adds the three lines that use it:
+
+```python name="paths" extends="paths-defs" env="OUTPUT,WORK_DIR"
+E = os.environ
+Path(E["WORK_DIR"]).mkdir(parents=True, exist_ok=True)
+vars_out(**derive_paths(E["OUTPUT"], E["WORK_DIR"]))
+```
+
+And its tests, which extend the same definitions:
+
+```python name="paths-test" extends="paths-defs"
+import unittest
+
+
+class PathsTests(unittest.TestCase):
+    def test_paths_derive_from_output(self):
+        p = derive_paths("/o/talk (1).subbed.mp4", "/w")
+        self.assertRegex(p["SRT"], r"^/w/talk \(1\)\.subbed-[0-9a-f]{8}\.srt$")
+        self.assertTrue(p["WORDS"].endswith(".words.json"))
+        self.assertTrue(all(v.startswith("/w/") for v in p.values()))  # nothing next to OUTPUT
+
+    def test_same_stem_in_different_folders_does_not_collide(self):
+        a = derive_paths("/a/talk.mp4", "/w")
+        b = derive_paths("/b/talk.mp4", "/w")
+        self.assertTrue(set(a.values()).isdisjoint(b.values()))
+
+    def test_the_edited_copy_is_a_sibling_of_the_generated_srt(self):
+        p = derive_paths("/o/talk.mp4", "/w")
+        self.assertEqual(p["SRT_EDITED"], p["SRT"][:-len(".srt")] + ".edited.srt")
+
+
+unittest.main(argv=["paths-test"], verbosity=2)
+```
+
+### Tests
+<!-- meshfox:node id="tests" -->
+
+Every function above has unit tests next to it (`paths-test`, `segment-test`,
+`check-test`, `srt-test`, `render-test`). Each runs on its own from its node;
+this block runs all of them. They need no video, Whisper or agent: the
+transcription call and the encoders themselves were exercised end to end.
+
+```bash name="tests" default deps="paths/paths-test,segment/segment-test,translate/check-test,export/srt-test,render/render-test"
+echo "all subtitle tests passed"
+```
+
+## Design notes
+<!-- meshfox:node id="design-notes" -->
+
+Why the tool is built the way it is: the alternatives that were considered.
+
+### Design note: a subtitle editor in the middle
 <!-- meshfox:node id="editor-options" color="3" -->
 
 The **Edit** step needs *some* editor. Options, roughly from cheapest to most
@@ -409,7 +1081,7 @@ timing, so the realistic choices are the first two now, and a small Textual
 TUI if hand-editing becomes routine. The edited `.srt` is the contract: whichever
 editor is used, **Render** reads only that file.
 
-## Why mpv for burning in
+### Why mpv for burning in
 <!-- meshfox:node id="why-mpv" -->
 
 On the machine this was built on, `ffmpeg -h filter=subtitles` says
@@ -419,230 +1091,3 @@ ffmpeg. If your ffmpeg does have libass it is used instead (it is also faster
 to start). Burning in is a re-encode either way: CRF 18, x264, same
 resolution and frame rate as the source.
 
-## Tests
-<!-- meshfox:node id="tests" -->
-
-Unit tests for `subs_lib.py`: segmentation (pauses, sentence ends,
-balanced splits, hallucination filtering, CJK, overlap), SRT/ASS formatting,
-translation validation, and the guarantee that hand edits survive a re-export.
-The transcription and rendering calls themselves are not unit-tested — they
-need Whisper and a video — they were exercised end to end instead.
-
-```python name="tests" interpreter="$PYTHON -u"
-"""Tests for subs_lib.py."""
-from __future__ import annotations
-
-import json
-import os
-import sys
-import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
-import subs_lib as subs  # this block runs in the canvas directory
-
-
-def words(text: str, start: float = 0.0, step: float = 0.4, gap_before: dict | None = None):
-    """Fake word timestamps; `gap_before` = {word_index: extra silence}."""
-    out, t = [], start
-    for i, w in enumerate(text.split()):
-        t += (gap_before or {}).get(i, 0)
-        out.append({"word": " " + w, "start": round(t, 3), "end": round(t + step * 0.9, 3), "probability": 0.9})
-        t += step
-    return out
-
-
-def seg(ws, **kw):
-    return {"start": ws[0]["start"], "end": ws[-1]["end"], "text": "", "words": ws,
-            "no_speech_prob": 0.0, "avg_logprob": -0.2, "compression_ratio": 1.2, **kw}
-
-
-class SegmentTests(unittest.TestCase):
-    def test_long_pause_starts_a_new_cue(self):
-        cues = subs.build_cues([seg(words("one two three four five six", gap_before={3: 2.0}))], "en")
-        self.assertEqual([c["text"] for c in cues], ["one two three", "four five six"])
-
-    def test_sentence_end_splits_once_cue_has_substance(self):
-        cues = subs.build_cues([seg(words("Hello everyone. Today we talk about subtitles."))], "en")
-        self.assertEqual([c["text"] for c in cues], ["Hello everyone.", "Today we talk about subtitles."])
-
-    def test_tiny_sentence_is_merged_not_left_alone(self):
-        cues = subs.build_cues([seg(words("Yes. We can do that for you today."))], "en")
-        self.assertEqual(len(cues), 1)
-
-    def test_overlong_sentence_splits_into_balanced_halves(self):
-        text = "Today we are going to talk about how to build a small tool that translates subtitles."
-        cues = subs.build_cues([seg(words(text, step=0.2))], "en")
-        self.assertEqual(len(cues), 2)
-        self.assertTrue(all(len(c["text"]) <= 84 for c in cues))
-        self.assertLess(abs(len(cues[0]["text"]) - len(cues[1]["text"])), 25)
-
-    def test_prefers_clause_break_when_splitting(self):
-        text = "It is surprisingly simple, and it works really well even on very long videos like this one."
-        cues = subs.build_cues([seg(words(text, step=0.2))], "en", max_chars=60)
-        self.assertEqual(cues[0]["text"], "It is surprisingly simple,")
-
-    def test_hallucinated_segments_are_dropped(self):
-        good = seg(words("A real sentence of speech."))
-        silence = seg(words("Thanks for watching!", start=20), no_speech_prob=0.9, avg_logprob=-1.5)
-        loop = seg(words("la la la la", start=30), compression_ratio=3.0)
-        cues = subs.build_cues([good, silence, loop], "en")
-        self.assertEqual([c["text"] for c in cues], ["A real sentence of speech."])
-
-    def test_cjk_words_are_joined_without_spaces(self):
-        ws = [{"word": c, "start": i * 0.2, "end": i * 0.2 + 0.15, "probability": 1} for i, c in enumerate("你好世界。")]
-        self.assertEqual(subs.build_cues([seg(ws)], "zh")[0]["text"], "你好世界。")
-
-    def test_cues_are_ordered_numbered_and_never_overlap(self):
-        cues = subs.build_cues([seg(words("a b c d e f g h i j k l m n o p", gap_before={5: 1, 10: 1}))], "en")
-        self.assertEqual([c["i"] for c in cues], list(range(1, len(cues) + 1)))
-        for a, b in zip(cues, cues[1:]):
-            self.assertLessEqual(a["end"], b["start"] + 1e-9)
-            self.assertGreater(a["end"], a["start"])
-
-    def test_short_cue_is_stretched_but_not_into_the_next_one(self):
-        def w(word, a, b):
-            return {"word": " " + word, "start": a, "end": b, "probability": 1}
-        # A very quick "Hello there everyone." (0.3 s) followed at 0.4 s by the next sentence.
-        ws = [w("Hello", 0.0, 0.1), w("there", 0.1, 0.2), w("everyone.", 0.2, 0.3),
-              w("Next", 0.4, 0.6), w("sentence", 0.6, 0.9), w("is", 0.9, 1.0), w("here.", 1.0, 1.4)]
-        cues = subs.build_cues([seg(ws)], "en")
-        self.assertEqual(len(cues), 2)
-        self.assertEqual(cues[0]["end"], 0.4)          # wanted 0.6, capped at the next start
-
-    def test_triple_repeat_is_collapsed(self):
-        ws = []
-        for k in range(4):
-            ws += words("See you next time.", start=k * 10)
-        cues = subs.build_cues([seg(ws)], "en")
-        self.assertEqual(len([c for c in cues if c["text"] == "See you next time."]), 2)
-
-
-class CheckTests(unittest.TestCase):
-    CUES = [{"i": 1, "text": "Hello"}, {"i": 2, "text": "World"}]
-
-    def ok(self, tr):
-        return subs.check_translation(self.CUES, tr)
-
-    def test_accepts_matching_translation(self):
-        self.assertEqual(self.ok([{"i": 1, "text": "Привет"}, {"i": 2, "text": "Мир"}]), [])
-
-    def test_rejects_missing_cue(self):
-        self.assertIn("missing [2]", self.ok([{"i": 1, "text": "Привет"}])[0])
-
-    def test_rejects_wrong_order_or_duplicates(self):
-        self.assertTrue(self.ok([{"i": 2, "text": "Мир"}, {"i": 1, "text": "Привет"}]))
-        self.assertTrue(self.ok([{"i": 1, "text": "a"}, {"i": 1, "text": "b"}]))
-
-    def test_rejects_empty_text_and_non_list(self):
-        self.assertIn("empty translation", self.ok([{"i": 1, "text": "  "}, {"i": 2, "text": "Мир"}])[0])
-        self.assertTrue(self.ok({"i": 1}))
-
-    def test_rejects_runaway_length(self):
-        self.assertIn("suspiciously long", self.ok([{"i": 1, "text": "x" * 500}, {"i": 2, "text": "Мир"}])[0])
-
-
-class SrtTests(unittest.TestCase):
-    def test_roundtrip(self):
-        cues = [{"start": 0.0, "end": 1.5, "text": "Hello"}, {"start": 3661.25, "end": 3662.0, "text": "two\nlines"}]
-        back = subs.parse_srt(subs.to_srt(cues, "ru"))
-        self.assertEqual([(c["start"], c["end"], c["text"]) for c in back],
-                         [(0.0, 1.5, "Hello"), (3661.25, 3662.0, "two\nlines")])
-
-    def test_timestamp_format(self):
-        self.assertEqual(subs.fmt_srt_time(3723.456), "01:02:03,456")
-
-    def test_parse_tolerates_crlf_and_missing_index(self):
-        text = "00:00:01,000 --> 00:00:02,000\r\nHi\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nThere\r\n"
-        self.assertEqual([c["text"] for c in subs.parse_srt(text)], ["Hi", "There"])
-
-    def test_wrap_balances_two_lines(self):
-        out = subs.wrap_text("Today we are going to talk about how to build", "en")
-        a, b = out.split("\n")
-        self.assertLess(abs(len(a) - len(b)), 8)
-        self.assertEqual(subs.wrap_text("short", "en"), "short")
-
-
-class ExportTests(unittest.TestCase):
-    CUES = [{"i": 1, "start": 0, "end": 1, "text": "Hello"}, {"i": 2, "start": 1, "end": 2, "text": "World"}]
-    TR = [{"i": 1, "text": "Привет"}, {"i": 2, "text": "Мир"}]
-
-    def test_uses_translation_when_asked(self):
-        with TemporaryDirectory() as d:
-            srt = str(Path(d) / "x.srt")
-            self.assertEqual(subs.export_srt(self.CUES, self.TR, srt, use_translated=True, lang="ru"), "written")
-            self.assertIn("Привет", Path(srt).read_text())
-
-    def test_regenerates_an_untouched_file(self):
-        with TemporaryDirectory() as d:
-            srt = str(Path(d) / "x.srt")
-            subs.export_srt(self.CUES, None, srt, use_translated=False, lang="en")
-            self.assertEqual(subs.export_srt(self.CUES, self.TR, srt, use_translated=True, lang="ru"), "written")
-            self.assertIn("Мир", Path(srt).read_text())
-
-    def test_never_overwrites_hand_edits(self):
-        with TemporaryDirectory() as d:
-            srt = Path(d) / "x.srt"
-            subs.export_srt(self.CUES, None, str(srt), use_translated=False, lang="en")
-            srt.write_text(srt.read_text().replace("World", "Everybody"))
-            self.assertEqual(subs.export_srt(self.CUES, self.TR, str(srt), use_translated=True, lang="ru"), "kept")
-            self.assertIn("Everybody", srt.read_text())
-
-    def test_does_not_adopt_a_foreign_srt(self):
-        with TemporaryDirectory() as d:
-            srt = Path(d) / "x.srt"
-            srt.write_text("mine")
-            self.assertEqual(subs.export_srt(self.CUES, None, str(srt), use_translated=False, lang="en"), "kept")
-            self.assertEqual(srt.read_text(), "mine")
-
-
-class RenderTests(unittest.TestCase):
-    def test_ass_escapes_and_sizes_to_the_video(self):
-        ass = subs.to_ass([{"start": 0, "end": 1.5, "text": "a {b}\nc \\ d"}], width=1280, height=720, font="Arial")
-        self.assertIn("PlayResX: 1280", ass)
-        self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.50,Default,,0,0,0,,a \\{b\\}\\Nc \\\\ d", ass)
-        self.assertIn("Style: Default,Arial,40,", ass)
-
-    def test_ffmpeg_command_uses_a_plain_relative_ass_name(self):
-        cmd = subs.render_command("/v/a b (1).mp4", "sub.ass", "/o/out.mp4", tool="ffmpeg")
-        self.assertIn("ass=sub.ass", cmd)
-        self.assertEqual(cmd[cmd.index("-i") + 1], "/v/a b (1).mp4")   # path passed as one argv item
-
-    def test_mpv_command_keeps_audio_and_picks_our_subs_only(self):
-        cmd = subs.render_command("/v/a.mp4", "sub.ass", "/o/out.mp4", tool="mpv")
-        self.assertIn("--sub-file=sub.ass", cmd)
-        self.assertIn("--no-sub-auto", cmd)
-        self.assertIn("--oac=aac", cmd)
-
-    def test_default_style_is_unchanged(self):
-        ass = subs.to_ass([{"start": 0, "end": 1, "text": "a"}], width=1080, height=1920, font="Arial")
-        self.assertIn("Style: Default,Arial,106,&H00FFFFFF,", ass)
-        self.assertIn(",2,54,54,96,1", ass)  # bottom-centre, 5% margins
-
-    def test_style_options(self):
-        ass = subs.to_ass([{"start": 0, "end": 1, "text": "a"}], width=1000, height=1000, font="X",
-                          size_pct=4, pos="top", margin_pct=10, color="#FFCC00")
-        self.assertIn("Style: Default,X,40,&H0000CCFF,", ass)  # ASS colours are BGR
-        self.assertIn(",8,50,50,100,1", ass)
-
-    def test_style_rejects_nonsense(self):
-        cue = [{"start": 0, "end": 1, "text": "a"}]
-        for kw in ({"pos": "left"}, {"size_pct": 0}, {"size_pct": 90}, {"margin_pct": -1}, {"color": "red"}):
-            with self.assertRaises(SystemExit):
-                subs.to_ass(cue, width=100, height=100, font="X", **kw)
-
-    def test_paths_derive_from_output(self):
-        p = subs.derive_paths("/o/talk (1).subbed.mp4", "/w")
-        self.assertRegex(p["SRT"], r"^/w/talk \(1\)\.subbed-[0-9a-f]{8}\.srt$")
-        self.assertTrue(p["WORDS"].endswith(".words.json"))
-        self.assertTrue(all(v.startswith("/w/") for v in p.values()))  # nothing next to OUTPUT
-
-    def test_same_stem_in_different_folders_does_not_collide(self):
-        a = subs.derive_paths("/a/talk.mp4", "/w")
-        b = subs.derive_paths("/b/talk.mp4", "/w")
-        self.assertTrue(set(a.values()).isdisjoint(b.values()))
-
-
-if __name__ == "__main__":
-    unittest.main()
-```

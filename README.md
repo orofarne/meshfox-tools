@@ -10,8 +10,7 @@
 Small utilities around [meshfox](https://meshfox.orofarne.net/) canvases.
 One tool, one directory; each directory has its own `README.canvas.md`,
 and for the runnable tools that canvas *is* the tool — environment, scripts
-and tests live inside it, so there is nothing to install (`subtitles` adds one shared helper file,
-`subs_lib.py`, beside its canvas). Open this file
+and tests live inside it, so there is nothing to install. Open this file
 with `meshfox view README.md` and click through to a tool.
 
 ## obsidian2meshfox
