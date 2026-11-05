@@ -13,6 +13,13 @@ and for the runnable tools that canvas *is* the tool — environment, scripts
 and tests live inside it, so there is nothing to install. Open this file
 with `meshfox view README.md` and click through to a tool.
 
+## circle-vertical
+<!-- meshfox:node id="circle-vertical" type="file" -->
+
+[circle-vertical/README.canvas.md](./circle-vertical/README.canvas.md)
+
+Turns a Telegram video note (кружочек) into a tidy vertical video: a smooth-edged circle on a gradient, blurred-video or flat-colour background, with configurable resolution and circle position.
+
 ## obsidian2meshfox
 <!-- meshfox:node id="obsidian2meshfox" type="file" -->
 
