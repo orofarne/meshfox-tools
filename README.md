@@ -18,7 +18,7 @@ with `meshfox view README.md` and click through to a tool.
 
 [circle-vertical/README.canvas.md](./circle-vertical/README.canvas.md)
 
-Turns a Telegram video note (кружочек) into a tidy vertical video: a smooth-edged circle on a gradient, blurred-video or flat-colour background, with configurable resolution and circle position.
+Turns a Telegram video message into a tidy vertical video: a smooth-edged circle on a gradient, blurred-video or flat-colour background, with configurable resolution and circle position.
 
 ## obsidian2meshfox
 <!-- meshfox:node id="obsidian2meshfox" type="file" -->
