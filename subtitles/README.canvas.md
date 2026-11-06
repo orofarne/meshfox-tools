@@ -8,7 +8,7 @@
 > This note is only visible here, in a plain Markdown viewer.
 <!-- /meshfox:comment -->
 
-Takes a video, transcribes the speech locally (Whisper on Apple Silicon),
+Takes a video, transcribes the speech locally (Whisper: GPU on Apple Silicon, CPU or CUDA elsewhere),
 optionally translates the subtitles with your coding agent, lets you fix them
 by hand, and burns the result into a new video. This canvas is the whole
 tool: the environment, the code, its tests and every pipeline step live in the
@@ -61,7 +61,7 @@ the new subtitles.
 <!-- meshfox:var name="OUTPUT" type="file" mode="save" ext="mp4" prompt="Where to write the video with burned-in subtitles (.mp4)" -->
 <!-- meshfox:var name="SRC_LANG" type="select" choices="auto,en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="auto" prompt="Language spoken in the video (auto = detect)" -->
 <!-- meshfox:var name="DST_LANG" type="select" choices="en,ru,uk,de,fr,es,it,pt,pl,nl,cs,tr,ar,hi,zh,ja,ko" default="en" prompt="Subtitle language (translated only if it differs from the spoken one)" -->
-<!-- meshfox:var name="WHISPER_MODEL" type="select" choices="mlx-community/whisper-large-v3-turbo,mlx-community/whisper-small-mlx,mlx-community/whisper-tiny" default="mlx-community/whisper-large-v3-turbo" prompt="Whisper model (bigger = slower, more accurate)" -->
+<!-- meshfox:var name="WHISPER_MODEL" type="select" choices="large-v3-turbo,small,tiny" default="large-v3-turbo" prompt="Whisper model (bigger = slower, more accurate)" -->
 <!-- meshfox:var name="SUB_FONT" default="Helvetica" prompt="Subtitle font" -->
 <!-- meshfox:var name="SUB_SIZE" default="5.5" prompt="Subtitle size, % of the video height (4-7 is typical)" -->
 <!-- meshfox:var name="SUB_POS" type="select" choices="bottom,middle,top" default="bottom" prompt="Where the subtitles sit" -->
@@ -87,26 +87,55 @@ the new subtitles.
 ### Transcribe
 <!-- meshfox:node id="transcribe" x=0 y=0 w=360 h=60 -->
 
-Word-level transcript with `mlx-whisper`. `condition_on_previous_text` is off,
+Word-level transcript with Whisper: `mlx-whisper` on Apple Silicon, `faster-whisper`
+on Intel Macs and Linux. `condition_on_previous_text` is off,
 so one hallucination on silence or music cannot poison the rest. `inputs=` /
 `outputs=` make meshfox skip the step when the video and transcript are
 unchanged — also across sessions. Long videos take a while; the first run
 downloads the model.
 
 ```python name="transcribe-defs" extends="lib/core-defs"
-def transcribe(video: str, words_path: str, lang: str, model: str) -> None:
-    import mlx_whisper  # heavy import: only when actually transcribing
+MLX_MODELS = {
+    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+    "small": "mlx-community/whisper-small-mlx",
+    "tiny": "mlx-community/whisper-tiny",
+}
 
-    result = mlx_whisper.transcribe(
+
+def _run_whisper(video: str, lang: str, model: str) -> dict:
+    """Word-level Whisper result as {"language", "segments"} on any platform."""
+    language = None if lang == "auto" else lang
+    try:
+        import mlx_whisper  # Apple Silicon only; heavy import
+    except ImportError:
+        from faster_whisper import WhisperModel  # everywhere else
+
+        wm = WhisperModel(model, device="auto", compute_type="auto")
+        segs, info = wm.transcribe(
+            video, language=language, word_timestamps=True,
+            condition_on_previous_text=False,
+        )
+        return {"language": info.language, "segments": [
+            {"start": s.start, "end": s.end, "text": s.text,
+             "no_speech_prob": s.no_speech_prob, "avg_logprob": s.avg_logprob,
+             "compression_ratio": s.compression_ratio,
+             "words": [{"word": w.word, "start": w.start, "end": w.end,
+                        "probability": w.probability} for w in (s.words or [])]}
+            for s in segs]}
+    return mlx_whisper.transcribe(
         video,
-        path_or_hf_repo=model,
+        path_or_hf_repo=MLX_MODELS.get(model, model),
         word_timestamps=True,
-        language=None if lang == "auto" else lang,
+        language=language,
         # Without this a single hallucination (silence, music) poisons every
         # following segment.
         condition_on_previous_text=False,
         verbose=None,
     )
+
+
+def transcribe(video: str, words_path: str, lang: str, model: str) -> None:
+    result = _run_whisper(video, lang, model)
     segments = []
     for s in result["segments"]:
         segments.append({
@@ -912,8 +941,10 @@ The environment, shared code, path handling and tests: everything the pipeline s
 ### Python environment
 <!-- meshfox:node id="env" -->
 
-`mlx-whisper` runs Whisper on the Apple GPU, so this tool needs Apple Silicon.
-The block is a `pyproject.toml`: `@python_venv` installs it into an isolated
+On Apple Silicon `mlx-whisper` runs Whisper on the GPU; on Intel Macs and
+Linux `faster-whisper` is used instead (CPU, or CUDA on Linux with NVIDIA
+libraries installed), which is noticeably slower on CPU. The right package is
+picked by the environment markers below. The block is a `pyproject.toml`: `@python_venv` installs it into an isolated
 venv under `.meshfox/` and publishes its interpreter as `$PYTHON`. The first
 run downloads the packages (about a minute) and the chosen Whisper model.
 
@@ -922,7 +953,12 @@ run downloads the packages (about a minute) and the chosen Whisper model.
 name = "subtitles-env"
 version = "0.0.0"
 requires-python = ">=3.10"
-dependencies = ["mlx-whisper"]
+dependencies = [
+  'mlx-whisper; sys_platform == "darwin" and platform_machine == "arm64"',
+  'faster-whisper; sys_platform != "darwin" or platform_machine != "arm64"',
+  # faster-whisper 1.2 breaks with newer PyAV (open() has no metadata_errors)
+  'av<17; sys_platform != "darwin" or platform_machine != "arm64"',
+]
 ```
 
 ### Shared helpers
